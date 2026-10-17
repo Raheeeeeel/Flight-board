@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Flight Board</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1220; --panel:#101a2e; --panel-2:#0e1729;
+    --text:#eaf1fb; --muted:#8aa0c2; --accent:#22d3ee;
+    --accent-soft:rgba(34,211,238,.14); --amber:#fbbf24; --green:#34d399; --red:#f87171;
+    --border:rgba(138,160,194,.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 600px at 80% -10%, rgba(34,211,238,.08), transparent 60%),
+               radial-gradient(900px 500px at 0% 110%, rgba(59,130,246,.10), transparent 60%), var(--bg);
+    color:var(--text); font-family:'Sora',system-ui,sans-serif; min-height:100vh;
+    display:flex; flex-direction:column; overflow-x:hidden;
+  }
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;font-variant-numeric:tabular-nums}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.1rem 1.6rem;border-bottom:1px solid var(--border);background:linear-gradient(180deg, rgba(34,211,238,.06), transparent);flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:.9rem;min-width:0}
+  .logo{width:42px;height:42px;border-radius:10px;flex:0 0 auto;background:var(--accent-soft);border:1px solid var(--accent);display:grid;place-items:center;color:var(--accent)}
+  .brand h1{font-size:1.1rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand .sub{font-size:.72rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+  .clock{text-align:right}
+  .clock .time{font-size:1.6rem;font-weight:700;letter-spacing:.06em}
+  .clock .date{font-size:.72rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+
+  .modebar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.7rem 1.6rem;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap}
+  .tabs{display:flex;gap:.5rem}
+  .tab{padding:.45rem 1.1rem;border-radius:8px;font-size:.8rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;user-select:none;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all .2s ease;font-family:inherit}
+  .tab.active{background:var(--accent);color:#062029;border-color:var(--accent);box-shadow:0 0 18px rgba(34,211,238,.35)}
+  .meta{display:flex;align-items:center;gap:1rem;font-size:.75rem;color:var(--muted);letter-spacing:.05em;flex-wrap:wrap}
+  .badge{padding:.25rem .6rem;border-radius:999px;font-size:.68rem;font-weight:700;letter-spacing:.08em;border:1px solid var(--amber);color:var(--amber);background:rgba(251,191,36,.08);text-transform:uppercase}
+  .badge.live{border-color:var(--green);color:var(--green);background:rgba(52,211,153,.08)}
+  .badge.err{border-color:var(--red);color:var(--red);background:rgba(248,113,113,.08)}
+  .pagecount{font-weight:700;color:var(--text)}
+
+  main{flex:1;padding:1rem 1.6rem 1.4rem;overflow:hidden;position:relative}
+  .board{width:100%;border-collapse:collapse;table-layout:fixed}
+  .board th{text-align:left;font-size:.7rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);padding:.7rem .8rem;border-bottom:2px solid var(--accent)}
+  .board td{padding:.95rem .8rem;font-size:1.05rem;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .board tbody tr{transition:background .2s ease}
+  .board tbody tr:hover{background:rgba(34,211,238,.05)}
+  .board tbody tr:nth-child(even){background:rgba(255,255,255,.015)}
+  .col-time{width:11%}.col-flight{width:12%}.col-dest{width:30%}.col-airline{width:22%}.col-term{width:10%}.col-status{width:15%}
+  .flightno{font-weight:700;color:var(--accent)}
+  .dest .city{font-weight:600}.dest .code{color:var(--muted);font-size:.8rem;margin-left:.4rem}
+  .status{display:inline-block;padding:.28rem .7rem;border-radius:6px;font-size:.78rem;font-weight:700;letter-spacing:.04em}
+  .st-scheduled{color:var(--text);background:rgba(255,255,255,.07);border:1px solid var(--border)}
+  .st-delayed,.st-active{color:var(--amber);background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.4)}
+  .st-departed,.st-landed{color:var(--green);background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.4)}
+  .st-cancelled,.st-diverted,.st-incident{color:var(--red);background:rgba(248,113,113,.10);border:1px solid rgba(248,113,113,.4)}
+
+  .msg{padding:3rem 1rem;text-align:center;color:var(--muted);font-size:1rem;line-height:1.7}
+  .msg .big{font-size:1.3rem;color:var(--text);font-weight:700;margin-bottom:.6rem}
+
+  footer{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:.8rem 1.6rem;border-top:1px solid var(--border);font-size:.72rem;color:var(--muted);letter-spacing:.04em;background:var(--panel-2)}
+  footer .btns{display:flex;gap:.6rem;flex-wrap:wrap}
+  .btn{padding:.4rem .9rem;border-radius:8px;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--text);transition:all .2s ease;font-family:inherit;text-decoration:none;display:inline-block}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#062029;border-color:var(--accent)}
+  .src a{color:var(--accent);text-decoration:none}.src a:hover{text-decoration:underline}
+
+  .fade-in{animation:fade .5s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* ---------- Settings modal ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(4,8,16,.78);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:50;padding:1rem}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;padding:1.8rem;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modal h2{font-size:1.15rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.4rem}
+  .modal p.lead{font-size:.82rem;color:var(--muted);line-height:1.6;margin-bottom:1.2rem}
+  .modal label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:1rem 0 .35rem}
+  .modal input[type=text]{width:100%;padding:.7rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:ui-monospace,Menlo,monospace;font-size:.9rem}
+  .modal input[type=text]:focus{outline:none;border-color:var(--accent)}
+  .modal .row{display:flex;gap:1rem;align-items:center;margin-top:1.2rem;flex-wrap:wrap}
+  .modal .check{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--muted);cursor:pointer}
+  .modal .hint{font-size:.72rem;color:var(--muted);margin-top:.35rem;line-height:1.5}
+  .modal .hint a{color:var(--accent)}
+  .errline{color:var(--red);font-size:.78rem;margin-top:.6rem;min-height:1em}
+
+  @media (max-width:900px){
+    .col-airline{display:none}
+    .board td{font-size:.9rem;padding:.7rem .5rem}
+    .brand h1{font-size:.9rem}.clock .time{font-size:1.2rem}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
+    </div>
+    <div>
+      <h1 id="airportTitle">Live Flight Board</h1>
+      <div class="sub" id="airportCode">—</div>
+    </div>
+  </div>
+  <div class="clock">
+    <div class="time mono" id="clockTime">--:--:--</div>
+    <div class="date" id="clockDate">—</div>
+  </div>
+</header>
+
+<div class="modebar">
+  <div class="tabs">
+    <button class="tab active" data-mode="departures">Departures</button>
+    <button class="tab" data-mode="arrivals">Arrivals</button>
+  </div>
+  <div class="meta">
+    <span class="badge" id="dataBadge">Connecting…</span>
+    <span>Refresh <span class="mono" id="refreshIn">—</span></span>
+    <span>Page <span class="pagecount mono" id="pageCount">1/1</span></span>
+  </div>
+</div>
+
+<main>
+  <table class="board">
+    <thead>
+      <tr>
+        <th class="col-time">Time</th><th class="col-flight">Flight</th><th class="col-dest">Destination</th>
+        <th class="col-airline">Airline</th><th class="col-term">Terminal</th><th class="col-status">Status</th>
+      </tr>
+    </thead>
+    <tbody id="boardBody"></tbody>
+  </table>
+  <div class="msg" id="msgBox" style="display:none"></div>
+</main>
+
+<footer>
+  <div class="src">Source: <span id="srcLabel">AirLabs live schedule API</span></div>
+  <div class="btns">
+    <a class="btn" id="fr24Link" href="#" target="_blank" rel="noopener">Real FR24</a>
+    <button class="btn" id="settingsBtn">Settings</button>
+    <button class="btn on" id="autoBtn">Auto-page: ON</button>
+    <button class="btn" id="fsBtn">Fullscreen</button>
+  </div>
+</footer>
+
+<!-- Settings / first-run modal -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal">
+    <h2>Live Flight Board — Setup</h2>
+    <p class="lead">This board shows <strong>real live flights</strong>. It needs a free API key once — paste it below and it is saved on this device. No fake demo data is shown unless you enable it.</p>
+
+    <label>AirLabs API key (free)</label>
+    <input type="text" id="inKey" placeholder="e.g. 1a2b3c4d-5e6f-7a8b-9c0d-..." autocomplete="off">
+    <div class="hint">Get one free at <a href="https://airlabs.co" target="_blank" rel="noopener">airlabs.co</a> → Sign Up → copy your API key. Free tier ≈ 1,000 requests/day (enough for a refresh every few minutes).</div>
+
+    <label>Airport IATA code</label>
+    <input type="text" id="inAirport" placeholder="KUL" maxlength="4" autocomplete="off">
+    <div class="hint">3-letter code: KUL = Kuala Lumpur, SIN = Singapore, LHR = London Heathrow, JFK = New York…</div>
+
+    <label>Refresh every (seconds)</label>
+    <input type="text" id="inRefresh" placeholder="240" autocomplete="off">
+    <div class="hint">240s (4 min) = 360 requests/day — safely within the free tier. Lower it if you upgrade to a paid plan.</div>
+
+    <div class="row">
+      <label class="check"><input type="checkbox" id="inDemo"> Show demo flights (offline preview)</label>
+    </div>
+    <div class="errline" id="errLine"></div>
+    <div class="row">
+      <button class="btn primary" id="saveBtn">Save &amp; load live flights</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var LS_KEY = "flightboard_settings_v1";
+
+  var DEFAULTS = { airport:"KUL", airlabsKey:"", refresh:240, demo:false };
+  var settings = loadSettings();
+
+  var state = {
+    mode:"departures", rows:[], page:0, autoPage:true,
+    timers:{page:null, refresh:null, clock:null, countdown:null},
+    nextIn: settings.refresh, lastError:""
+  };
+
+  var DEMO = {
+    departures:[
+      {time:"14:25",flight:"MH 139",dest:"Adelaide",code:"ADL",airline:"Malaysia Airlines",term:"1",status:"scheduled"},
+      {time:"15:50",flight:"MH 145",dest:"Auckland",code:"AKL",airline:"Malaysia Airlines",term:"1",status:"scheduled"},
+      {time:"15:00",flight:"OD 1006",dest:"Kota Kinabalu",code:"BKI",airline:"Batik Air Malaysia",term:"1",status:"scheduled"},
+      {time:"14:30",flight:"AK 570",dest:"Kota Kinabalu",code:"BKI",airline:"AirAsia",term:"KLIA2",status:"scheduled"},
+      {time:"15:55",flight:"MH 776",dest:"Bangkok Suvarnabhumi",code:"BKK",airline:"Malaysia Airlines",term:"1",status:"departed"},
+      {time:"16:35",flight:"MH 3",dest:"London Heathrow",code:"LHR",airline:"Malaysia Airlines",term:"1",status:"scheduled"},
+      {time:"17:05",flight:"SQ 107",dest:"Singapore",code:"SIN",airline:"Singapore Airlines",term:"1",status:"scheduled"},
+      {time:"18:00",flight:"MH 123",dest:"Sydney",code:"SYD",airline:"Malaysia Airlines",term:"1",status:"scheduled"}
+    ],
+    arrivals:[
+      {time:"14:40",flight:"MH 138",dest:"Adelaide",code:"ADL",airline:"Malaysia Airlines",term:"1",status:"landed"},
+      {time:"15:20",flight:"SQ 106",dest:"Singapore",code:"SIN",airline:"Singapore Airlines",term:"1",status:"scheduled"},
+      {time:"16:05",flight:"AK 571",dest:"Kota Kinabalu",code:"BKI",airline:"AirAsia",term:"KLIA2",status:"scheduled"},
+      {time:"17:15",flight:"MH 4",dest:"London Heathrow",code:"LHR",airline:"Malaysia Airlines",term:"1",status:"scheduled"}
+    ]
+  };
+
+  function loadSettings(){
+    try{
+      var raw = localStorage.getItem(LS_KEY);
+      if(raw){ var s = JSON.parse(raw); return Object.assign({}, DEFAULTS, s); }
+    }catch(e){}
+    return Object.assign({}, DEFAULTS);
+  }
+  function saveSettings(){
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(settings)); }catch(e){}
+  }
+
+  /* ---------- Clock ---------- */
+  function tickClock(){
+    var d=new Date(), p=function(n){return (n<10?"0":"")+n;};
+    $("clockTime").textContent = p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+    $("clockDate").textContent = d.toLocaleDateString(undefined,{weekday:"short",day:"2-digit",month:"short",year:"numeric"}).toUpperCase();
+  }
+
+  /* ---------- Render ---------- */
+  function statusClass(s){
+    s=(s||"").toLowerCase();
+    if(s.indexOf("delay")>-1) return "st-delayed";
+    if(s.indexOf("cancel")>-1||s.indexOf("divert")>-1||s.indexOf("incident")>-1) return "st-cancelled";
+    if(s.indexOf("depart")>-1||s.indexOf("land")>-1||s.indexOf("arriv")>-1||s.indexOf("activ")>-1) return "st-departed";
+    return "st-scheduled";
+  }
+  function showMsg(html){
+    $("boardBody").innerHTML="";
+    var m=$("msgBox"); m.style.display="block"; m.innerHTML=html;
+  }
+  function render(){
+    var rows = state.rows || [];
+    if(!rows.length){
+      var body = state.lastError
+        ? '<div class="big">Live data unavailable right now</div>'+state.lastError+'<br>Retrying automatically…'
+        : '<div class="big">Loading live flights…</div>Fetching the latest schedule for '+settings.airport.toUpperCase()+'.';
+      showMsg(body);
+      $("pageCount").textContent="1/1";
+      return;
+    }
+    $("msgBox").style.display="none";
+    var per=6, pages=Math.max(1,Math.ceil(rows.length/per));
+    if(state.page>=pages) state.page=0;
+    var slice=rows.slice(state.page*per,(state.page+1)*per);
+    var tb=$("boardBody"); tb.innerHTML="";
+    slice.forEach(function(f){
+      var tr=document.createElement("tr"); tr.className="fade-in";
+      function td(cls,txt,mono){var c=document.createElement("td");c.className=cls+(mono?" mono":"");c.textContent=txt||"-";tr.appendChild(c);return c;}
+      td("col-time",f.time,true);
+      var cf=td("col-flight","");var sp=document.createElement("span");sp.className="flightno mono";sp.textContent=f.flight||"-";cf.appendChild(sp);
+      var cd=td("col-dest","");cd.className="col-dest dest";
+      var city=document.createElement("span");city.className="city";city.textContent=f.dest||"-";
+      var code=document.createElement("span");code.className="code mono";code.textContent=f.code||"";
+      cd.appendChild(city); if(f.code) cd.appendChild(code);
+      td("col-airline",f.airline,false);
+      td("col-term",f.term,true);
+      var cs=td("col-status","");var st=document.createElement("span");st.className="status "+statusClass(f.status);st.textContent=(f.status||"scheduled").toUpperCase();cs.appendChild(st);
+      tb.appendChild(tr);
+    });
+    $("pageCount").textContent=(state.page+1)+"/"+pages;
+    $("airportTitle").textContent = settings.airport.toUpperCase()+" — "+(state.mode==="departures"?"Departures":"Arrivals");
+    $("airportCode").textContent = "Live Flight Information Display · real-time schedule data";
+  }
+
+  function restartPageTimer(){
+    if(state.timers.page) clearInterval(state.timers.page);
+    if(!state.autoPage) return;
+    state.timers.page=setInterval(function(){
+      var pages=Math.max(1,Math.ceil((state.rows||[]).length/6));
+      state.page=(state.page+1)%pages; render();
+    },8000);
+  }
+
+  /* ---------- Live data: AirLabs ---------- */
+  function normalize(list,mode){
+    return (list||[]).map(function(f){
+      var t=(mode==="departures")?(f.dep_time||f.dep_estimated||"--:--"):(f.arr_time||f.arr_estimated||"--:--");
+      var other=(mode==="departures")?f.arr_iata:f.dep_iata;
+      return{
+        time:(t||"--:--").slice(0,5),
+        flight:((f.airline_iata||"")+" "+(f.flight_number||f.flight_iata||"")).trim(),
+        dest:(mode==="departures")?(f.arr_name||other||""):(f.dep_name||other||""),
+        code:other||"",
+        airline:f.airline_name||f.airline_iata||"",
+        term:(mode==="departures")?(f.dep_terminal||"-"):(f.arr_terminal||"-"),
+        status:f.status||"scheduled"
+      };
+    }).sort(function(a,b){return a.time<b.time?-1:1;});
+  }
+  function fetchLive(){
+    if(settings.demo){
+      state.rows = DEMO[state.mode]?DEMO[state.mode].slice():[];
+      state.lastError=""; setBadge("demo","Demo mode");
+      $("srcLabel").textContent="Demo schedule (offline preview) — disable in Settings for live data";
+      state.page=0; render(); return;
+    }
+    if(!settings.airlabsKey){
+      setBadge("err","Setup needed");
+      state.lastError=""; state.rows=[]; render();
+      $("settingsOverlay").classList.add("show"); return;
+    }
+    var key = settings.airlabsKey;
+    var param = (state.mode==="departures")?"dep_iata":"arr_iata";
+    var url="https://airlabs.co/api/v9/schedules?api_key="+encodeURIComponent(key)+"&"+param+"="+encodeURIComponent(settings.airport);
+    setBadge("","Connecting…");
+    fetch(url)
+      .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status); return r.json();})
+      .then(function(json){
+        if(json.error) throw new Error(typeof json.error==="object"?(json.error.message||"API error"):json.error);
+        state.rows = normalize(json.response, state.mode);
+        state.lastError=""; state.page=0;
+        setBadge("live","Live · AirLabs");
+        $("srcLabel").textContent="AirLabs live schedule API · airport "+settings.airport.toUpperCase()+" · updated "+new Date().toLocaleTimeString();
+        render();
+      })
+      .catch(function(e){
+        state.lastError = (e&&e.message)?e.message:"Network or quota error.";
+        setBadge("err","Retry pending");
+        state.rows=[]; render();
+      });
+  }
+  function setBadge(cls,txt){
+    var b=$("dataBadge"); b.textContent=txt;
+    b.className="badge"+(cls?" "+cls:"");
+  }
+
+  /* ---------- Controls ---------- */
+  document.querySelectorAll(".tab").forEach(function(tab){
+    tab.addEventListener("click",function(){
+      document.querySelectorAll(".tab").forEach(function(t){t.classList.remove("active");});
+      tab.classList.add("active");
+      state.mode=tab.getAttribute("data-mode"); state.page=0;
+      fetchLive(); restartPageTimer();
+    });
+  });
+  $("autoBtn").addEventListener("click",function(){
+    state.autoPage=!state.autoPage;
+    this.classList.toggle("on",state.autoPage);
+    this.textContent="Auto-page: "+(state.autoPage?"ON":"OFF");
+    restartPageTimer();
+  });
+  $("fsBtn").addEventListener("click",function(){
+    if(!document.fullscreenElement){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}
+    else{document.exitFullscreen&&document.exitFullscreen();}
+  });
+  $("settingsBtn").addEventListener("click",function(){
+    $("inKey").value=settings.airlabsKey||"";
+    $("inAirport").value=settings.airport||"KUL";
+    $("inRefresh").value=settings.refresh||240;
+    $("inDemo").checked=!!settings.demo;
+    $("errLine").textContent="";
+    $("settingsOverlay").classList.add("show");
+  });
+  $("saveBtn").addEventListener("click",function(){
+    var key=$("inKey").value.trim();
+    var airport=$("inAirport").value.trim().toUpperCase()||"KUL";
+    var refresh=parseInt($("inRefresh").value,10)||240;
+    if(refresh<30){refresh=30;}
+    if(!key && !$("inDemo").checked){
+      $("errLine").textContent="Paste a free AirLabs API key, or tick 'show demo flights' to preview offline.";
+      return;
+    }
+    settings.airlabsKey=key; settings.airport=airport; settings.refresh=refresh; settings.demo=$("inDemo").checked;
+    saveSettings();
+    state.nextIn=refresh;
+    $("settingsOverlay").classList.remove("show");
+    $("fr24Link").href="https://www.flightradar24.com/data/airports/"+airport.toLowerCase()+"/departures";
+    if(state.timers.refresh){clearInterval(state.timers.refresh);}
+    state.timers.refresh=setInterval(fetchLive, refresh*1000);
+    fetchLive();
+  });
+
+  /* ---------- Boot ---------- */
+  tickClock();
+  state.timers.clock=setInterval(tickClock,1000);
+  $("fr24Link").href="https://www.flightradar24.com/data/airports/"+settings.airport.toLowerCase()+"/departures";
+  state.timers.refresh=setInterval(fetchLive, settings.refresh*1000);
+  state.timers.countdown=setInterval(function(){
+    state.nextIn=state.nextIn<=1?settings.refresh:state.nextIn-1;
+    $("refreshIn").textContent=state.nextIn+"s";
+  },1000);
+  $("refreshIn").textContent=settings.refresh+"s";
+  restartPageTimer();
+  fetchLive();
+})();
+</script>
+</body>
+</html>
